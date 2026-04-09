@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+outputs/
+cache/
+hf_cache/
+slurm/
+*.out
+*.err
+

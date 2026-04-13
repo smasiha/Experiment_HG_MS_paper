@@ -2,6 +2,8 @@
 
 This note packages the remaining `Table 3` work into a low-cost staged plan that a collaborator can continue on another H100 server.
 
+If that server does not use Slurm, keep the same staged order and call the Python entrypoints directly with `python` / `torchrun`. The exact non-Slurm launch patterns are documented in `README.md`.
+
 ## Goal
 
 Fill `Hyper_grad_paper/Minima_Selection/example_paper.tex` `Table 3` with:

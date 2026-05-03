@@ -1,6 +1,6 @@
 # Real-World LLM Results Snapshot
 
-These are the current paper-facing numbers from `Hyper_grad_paper/Minima_Selection/example_paper.tex`.
+These are the current paper-facing numbers from `Hyper_grad_paper/Minima_Selection/example_paper.tex` and its included appendix files.
 
 ## Mathematical Reasoning: GSM8K / MATH
 
@@ -17,17 +17,16 @@ Final test accuracy in percent after the shared one-epoch final fine-tuning stag
 
 ## Large-Model Extension: Qwen2.5-32B
 
-Final GSM8K/MATH accuracy in percent. The transfer rows use source mixtures learned on Qwen-2-7B before final fine-tuning Qwen2.5-32B. The direct-diagnostic HG-MS row uses the memory-safe FSDP branch-selection diagnostic mixture.
+Final GSM8K/MATH accuracy in percent. Each completed non-OOM row applies the corresponding source-reweighting method to Qwen2.5-32B, forms the full `20K`-example final fine-tuning set from the resulting source mixture, and evaluates on the full GSM8K/MATH test sets.
 
 | Method | GSM8K | MATH |
 |---|---:|---:|
-| Uniform Weighting | `87.19` | `43.30` |
-| RHO-LOSS | `pending` | `pending` |
-| LESS | `pending` | `pending` |
-| ScaleBiO transfer | `88.40` | `51.29` |
-| ScaleBiO direct | `84.99` | `41.99` |
-| HG-MS transfer | `92.58` | `46.82` |
-| HG-MS direct diagnostic | `86.81` | `44.32` |
+| Uniform Weighting | `78.19` | `43.30` |
+| RHO-LOSS | `OOM` | `OOM` |
+| LESS | `OOM` | `OOM` |
+| ScaleBiO | `88.40` | `51.29` |
+| HG-baseline | `86.81` | `46.82` |
+| HG-MS | `92.58` | `53.32` |
 
 ## Instruction Following: MT-Bench
 

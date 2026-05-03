@@ -6,7 +6,7 @@ This directory contains the adapted LoRA pipelines used for the paper's real-wor
 
 - **Mathematical reasoning:** ten-source ScaleBiO-style portfolio, final evaluation on GSM8K and MATH.
 - **Instruction following:** eighteen-source instruction/chat portfolio, final evaluation on MT-Bench with a GPT-4o judge.
-- **Diagnostics:** Qwen-2-7B budget sensitivity, HG-MS branch-count sensitivity, zero-shot checks, and large-model Qwen2.5-32B transfer/direct-diagnostic paths.
+- **Diagnostics:** Qwen-2-7B budget sensitivity, HG-MS branch-count sensitivity, zero-shot checks, and the large-model Qwen2.5-32B path.
 
 ## Main Entry Points
 
@@ -53,6 +53,12 @@ Instruction following:
 - Training portfolio: eighteen instruction/chat sources.
 - Final fine-tuning: one epoch on a sampled `10K`-example SFT set.
 - Evaluation: standard FastChat MT-Bench questions, one generated answer per prompt, GPT-4o judge.
+
+Large-model Qwen2.5-32B:
+
+- Methods reported in the paper-facing ledger: `Uniform`, `RHO-LOSS`, `LESS`, `ScaleBiO`, `HG-baseline`, and `HG-MS`.
+- `RHO-LOSS` and `LESS` are marked `OOM` in the current paper table under the same large-model memory budget.
+- Completed non-OOM rows use the corresponding 32B source mixture, the full `20K`-example final fine-tuning set, and full GSM8K/MATH evaluation.
 
 ## Example Commands
 

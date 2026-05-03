@@ -1,6 +1,6 @@
 # Imbalanced Loss-Tuning Results Snapshot
 
-Current paper numbers from `Hyper_grad_paper/Minima_Selection/example_paper.tex`.
+Current paper numbers from `Hyper_grad_paper/Minima_Selection/example_paper.tex` and its included appendix files.
 
 ## MNIST balanced accuracy at 120s per algorithm
 
@@ -14,3 +14,6 @@ Current paper numbers from `Hyper_grad_paper/Minima_Selection/example_paper.tex`
 
 Figure source in the draft:
 - `Hyper_grad_paper/Minima_Selection/figures/imbalance/compare_acc_vs_time_mean_ci_job2551942.png`
+
+Source of truth:
+- `Hyper_grad_paper/Minima_Selection/Appendix_neurips.tex`

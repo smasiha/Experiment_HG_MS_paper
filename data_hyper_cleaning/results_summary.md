@@ -1,6 +1,6 @@
 # Data Hyper-Cleaning Results Snapshot
 
-Current paper numbers from `Hyper_grad_paper/Minima_Selection/example_paper.tex`.
+Current paper numbers from `Hyper_grad_paper/Minima_Selection/example_paper.tex` and its included appendix files.
 
 ## Fixed-budget MNIST label-noise results
 
@@ -15,3 +15,5 @@ Current paper numbers from `Hyper_grad_paper/Minima_Selection/example_paper.tex`
 Figure source in the draft:
 - `Hyper_grad_paper/Minima_Selection/figures/data_hyper_cleaning/`
 
+Source of truth:
+- `Hyper_grad_paper/Minima_Selection/Appendix_neurips.tex`

@@ -24,7 +24,7 @@ The result summaries are frozen snapshots of the numbers currently used in the d
 - Data hyper-cleaning: `data_hyper_cleaning/results_summary.md`
 - Imbalanced loss tuning: `imbalance_data/results_summary.md`
 
-The LaTeX source remains the final source of truth for paper formatting, but these ledgers are meant to make the GitHub artifact self-contained and easy to inspect.
+The LaTeX source (`example_paper.tex` and its included appendix/section files) remains the final source of truth for paper formatting, but these ledgers are meant to make the GitHub artifact self-contained and easy to inspect.
 
 ## Environment
 

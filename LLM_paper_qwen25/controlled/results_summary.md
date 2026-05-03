@@ -1,10 +1,10 @@
 # Controlled LLM Results Snapshot
 
-These are the current paper numbers from `Hyper_grad_paper/Minima_Selection/example_paper.tex`.
+These are the current paper numbers from `Hyper_grad_paper/Minima_Selection/example_paper.tex` and its included appendix files.
 
 ## Denoising
 
-| Method | Learned lambda | L1 error | Val loss | Test loss |
+| Method | Learned omega | L1 error | Val loss | Test loss |
 |---|---:|---:|---:|---:|
 | Uniform | `(0.500, 0.500)` | `1.000` | `2.571` | `2.610` |
 | ScaleBiO | `(0.922, 0.078)` | `0.156` | `2.336` | `2.443` |
@@ -13,7 +13,7 @@ These are the current paper numbers from `Hyper_grad_paper/Minima_Selection/exam
 
 ## Multilingual
 
-| Method | Learned lambda | L1 error | Val loss | Test loss |
+| Method | Learned omega | L1 error | Val loss | Test loss |
 |---|---:|---:|---:|---:|
 | Uniform | `(0.500, 0.500)` | `0.200` | `2.430` | `2.407` |
 | ScaleBiO | `(0.623, 0.377)` | `0.047` | `2.339` | `2.371` |
@@ -22,4 +22,4 @@ These are the current paper numbers from `Hyper_grad_paper/Minima_Selection/exam
 
 Source of truth:
 - `Hyper_grad_paper/Minima_Selection/example_paper.tex`
-
+- `Hyper_grad_paper/Minima_Selection/Appendix_neurips.tex`

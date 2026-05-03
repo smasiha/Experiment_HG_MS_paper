@@ -1,14 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PACKAGE_ROOT_DEFAULT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-ROOT_DIR="${ROOT_DIR:-${PACKAGE_ROOT_DEFAULT}}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-${ROOT_DIR}/outputs/controlled/hg_tuning}"
+ROOT_DIR="${ROOT_DIR:-/home/masiha/hypergrad}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-/scratch/masiha/controlled_hg_tuning_20260315}"
 SEED="${SEED:-2424}"
 MAX_LENGTH="${MAX_LENGTH:-128}"
 
-cd "${ROOT_DIR}/controlled"
+cd "${ROOT_DIR}/LLM_minima_selection"
 
 submit_run() {
   local tag="$1"

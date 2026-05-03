@@ -1,14 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PACKAGE_ROOT_DEFAULT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-ROOT_DIR="${ROOT_DIR:-${PACKAGE_ROOT_DEFAULT}}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-${ROOT_DIR}/outputs/controlled/default_runs}"
+ROOT_DIR="${ROOT_DIR:-/home/masiha/hypergrad}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-${ROOT_DIR}/LLM_minima_selection_small_scale_runs_20260309}"
 SEED="${SEED:-2424}"
 TASKS="${TASKS:-denoising multilingual}"
 
-cd "${ROOT_DIR}/controlled"
+cd "${ROOT_DIR}/LLM_minima_selection"
 
 submit_method() {
   local task="$1"

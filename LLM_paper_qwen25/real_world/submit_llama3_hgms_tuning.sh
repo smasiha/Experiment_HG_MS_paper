@@ -1,0 +1,85 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${ROOT_DIR:-${SCRIPT_DIR}}"
+MODEL_PRESET="llama3_8b"
+SEED="${SEED:-2424}"
+TAG="${TAG:-llama3_8b_hgms_tuning_$(date +%Y%m%d_%H%M%S)}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-/scratch/${USER}/${TAG}}"
+
+source "${ROOT_DIR}/model_presets.sh"
+apply_math_model_preset "${MODEL_PRESET}"
+
+cd "${ROOT_DIR}"
+
+CACHE_PATH="${CACHE_PATH:-/scratch/${USER}/hypergrad_exact_cache/exact_splits_seed${SEED}_train500_val280_tov4.0_vov1.2.json}"
+
+submit_cfg() {
+  local suffix="$1"
+  local outer_lr="$2"
+  local branches="$3"
+  local selection_batches="$4"
+  local hypergrad_batches="$5"
+  local tolerance="$6"
+  local penalty="$7"
+
+  local run_name="hg_ms_tune_${suffix}_seed${SEED}_${MODEL_PRESET}_gsm8k"
+  sbatch \
+    --job-name="llama_hgms_${suffix}" \
+    --export=ALL,\
+METHOD=hg_ms,\
+MODEL_NAME="${MODEL_NAME}",\
+REFERENCE_MODEL_NAME="${REFERENCE_MODEL_NAME}",\
+SEED="${SEED}",\
+HF_CACHE_ROOT="/scratch/${USER}/hf_cache_jobs/${MODEL_PRESET}/${run_name}",\
+LOCAL_MODEL_ONLY="${LOCAL_MODEL_ONLY}",\
+STOP_AFTER_REWEIGHT=1,\
+USE_BEST_REWEIGHT_CHECKPOINT=1,\
+OUTPUT_ROOT="${OUTPUT_ROOT}",\
+RUN_NAME="${run_name}",\
+VAL_KINDS_SPEC=gsm8k,\
+MAX_LENGTH="${MAX_LENGTH}",\
+VAL_BATCH_SIZE="${VAL_BATCH_SIZE}",\
+SELECTION_VAL_BATCH_SIZE=1,\
+EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE}",\
+REWEIGHT_MODEL_LR=1e-4,\
+REWEIGHT_OUTER_LR="${outer_lr}",\
+BRANCH_NOISE_STD=0,\
+REWEIGHT_TRAIN_PER_SOURCE=500,\
+ALLOW_TRAIN_SHORTFALL=1,\
+PER_SOURCE_BATCH=1,\
+REWEIGHT_STEPS=100000,\
+REWEIGHT_WALL_CLOCK_SECONDS=3600,\
+SELECTION_VAL_BATCHES="${selection_batches}",\
+HYPERGRAD_VAL_BATCHES="${hypergrad_batches}",\
+REUSE_SELECTION_BATCHES_FOR_HYPERGRAD=1,\
+SELECTION_TRAIN_TOLERANCE="${tolerance}",\
+SELECTION_TRAIN_PENALTY="${penalty}",\
+INNER_STEPS=1,\
+SELECTION_INNER_STEPS=1,\
+HYPERGRAD_INNER_STEPS=1,\
+M_BRANCHES="${branches}",\
+FINAL_TRAIN_SIZE=5000,\
+FINAL_FT_MICRO_BATCH="${FINAL_FT_MICRO_BATCH}",\
+FINAL_FT_GRAD_ACCUM="${FINAL_FT_GRAD_ACCUM}",\
+GSM8K_EVAL_SIZE=256,\
+REFERENCE_BATCH_SIZE="${REFERENCE_BATCH_SIZE}",\
+REFERENCE_FT_STEPS=100,\
+LORA_R="${LORA_R}",\
+LORA_ALPHA="${LORA_ALPHA}",\
+LORA_DROPOUT="${LORA_DROPOUT}",\
+CACHE_PATH="${CACHE_PATH}" \
+    run_exact_math_reasoning.sbatch
+}
+
+echo "Model preset: ${MODEL_PRESET}"
+echo "Model: ${MODEL_NAME}"
+echo "Seed: ${SEED}"
+echo "Output root: ${OUTPUT_ROOT}"
+echo "Cache path: ${CACHE_PATH}"
+
+submit_cfg "base"     "1000.0" "4" "1" "1" "0.30" "0.05"
+submit_cfg "m6"       "1000.0" "6" "1" "1" "0.30" "0.05"
+submit_cfg "val2"     "1000.0" "4" "2" "2" "0.30" "0.05"
+submit_cfg "outer15"  "1500.0" "4" "1" "1" "0.20" "0.10"

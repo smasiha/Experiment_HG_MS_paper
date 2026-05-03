@@ -1,0 +1,26 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${ROOT_DIR:-${SCRIPT_DIR}}"
+MODEL_PRESET="${MODEL_PRESET:-llama3_8b}"
+SEEDS="${SEEDS:-2424}"
+METHODS="${METHODS:-uniform less rho_loss scalebio hg_single hg_ms}"
+REWEIGHT_WALL_CLOCK_SECONDS="${REWEIGHT_WALL_CLOCK_SECONDS:-900}"
+FINAL_TRAIN_SIZE="${FINAL_TRAIN_SIZE:-5000}"
+GSM8K_EVAL_SIZE="${GSM8K_EVAL_SIZE:-256}"
+TAG="${TAG:-math_gsm8k_${MODEL_PRESET}_calibration_$(date +%Y%m%d_%H%M%S)}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-/scratch/${USER}/${TAG}/math}"
+
+cd "${ROOT_DIR}"
+
+SEEDS="${SEEDS}" \
+METHODS="${METHODS}" \
+REWEIGHT_WALL_CLOCK_SECONDS="${REWEIGHT_WALL_CLOCK_SECONDS}" \
+FINAL_TRAIN_SIZE="${FINAL_TRAIN_SIZE}" \
+GSM8K_EVAL_SIZE="${GSM8K_EVAL_SIZE}" \
+MODEL_PRESET="${MODEL_PRESET}" \
+TAG="${TAG}" \
+OUTPUT_ROOT="${OUTPUT_ROOT}" \
+./submit_math_gsm8k_multiseed.sh
+

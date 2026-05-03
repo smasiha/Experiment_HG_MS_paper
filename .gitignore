@@ -3,4 +3,29 @@ __pycache__/
 *.pyc
 *.out
 *.err
+*.log
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+*.arrow
+*.parquet
+*.sqlite
+*.db
+.DS_Store
 
+# Local datasets, caches, generated checkpoints, and bulky diagnostics are not
+# part of the submission artifact. The repository keeps code, launchers, and
+# paper-facing result ledgers instead.
+data/
+cache/
+hf_cache/
+slurm/
+wandb/
+geometry_outputs/
+**/data/
+**/outputs/
+**/cache/
+**/hf_cache/
+**/__pycache__/

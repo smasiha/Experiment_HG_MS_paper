@@ -22,15 +22,14 @@ export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-${HF_CACHE_ROOT}/transformers}"
 export HF_ASSETS_CACHE="${HF_ASSETS_CACHE:-${HF_CACHE_ROOT}/assets}"
 mkdir -p "${HF_HUB_CACHE}" "${TRANSFORMERS_CACHE}" "${HF_ASSETS_CACHE}"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PACKAGE_ROOT_DEFAULT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-ROOT_DIR="${ROOT_DIR:-${PACKAGE_ROOT_DEFAULT}}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="${ROOT_DIR:-${SCRIPT_DIR}}"
 ENV_DIR="${ENV_DIR:-/home/masiha/venvs/hypergrad_llm_env}"
 METHOD="${METHOD:-hg_ms}"
 SEED="${SEED:-2424}"
 MODEL_NAME="${MODEL_NAME:-Qwen/Qwen2-7B}"
 REFERENCE_MODEL_NAME="${REFERENCE_MODEL_NAME:-Qwen/Qwen2-1.5B}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-${ROOT_DIR}/outputs/real_world_math/${SLURM_JOB_ID}}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-/scratch/${USER}/hypergrad_exact_outputs/${SLURM_JOB_ID}}"
 RUN_NAME="${RUN_NAME:-${METHOD}_seed${SEED}}"
 OUTPUT_DIR="${OUTPUT_ROOT}/${RUN_NAME}"
 
@@ -78,7 +77,9 @@ EVAL_MAX_NEW_TOKENS="${EVAL_MAX_NEW_TOKENS:-256}"
 GSM8K_EVAL_SIZE="${GSM8K_EVAL_SIZE:-0}"
 MATH_EVAL_SIZE="${MATH_EVAL_SIZE:-0}"
 REFERENCE_FT_STEPS="${REFERENCE_FT_STEPS:-200}"
+REFERENCE_FT_EPOCHS="${REFERENCE_FT_EPOCHS:-1}"
 REFERENCE_BATCH_SIZE="${REFERENCE_BATCH_SIZE:-8}"
+REFERENCE_GRAD_ACCUM="${REFERENCE_GRAD_ACCUM:-1}"
 REFERENCE_FT_LR="${REFERENCE_FT_LR:-2e-4}"
 BASELINE_SCORE_SAMPLES_PER_SOURCE="${BASELINE_SCORE_SAMPLES_PER_SOURCE:-256}"
 LORA_R="${LORA_R:-16}"
@@ -93,7 +94,7 @@ LOCAL_MODEL_ONLY="${LOCAL_MODEL_ONLY:-1}"
 mkdir -p "/scratch/${USER}/slurm"
 mkdir -p "$(dirname "${CACHE_PATH}")"
 mkdir -p "${OUTPUT_DIR}"
-cd "${ROOT_DIR}/real_world"
+cd "${ROOT_DIR}"
 
 source "${ENV_DIR}/bin/activate"
 
@@ -174,7 +175,9 @@ python -u exact_math_reasoning.py \
   --gsm8k-eval-size "${GSM8K_EVAL_SIZE}" \
   --math-eval-size "${MATH_EVAL_SIZE}" \
   --reference-ft-steps "${REFERENCE_FT_STEPS}" \
+  --reference-ft-epochs "${REFERENCE_FT_EPOCHS}" \
   --reference-batch-size "${REFERENCE_BATCH_SIZE}" \
+  --reference-grad-accum "${REFERENCE_GRAD_ACCUM}" \
   --reference-ft-lr "${REFERENCE_FT_LR}" \
   --baseline-score-samples-per-source "${BASELINE_SCORE_SAMPLES_PER_SOURCE}" \
   --lora-r "${LORA_R}" \

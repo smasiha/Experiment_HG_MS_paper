@@ -1,6 +1,7 @@
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 
+import os
 import time
 import random
 from typing import Dict, List, Optional, Any
@@ -221,7 +222,9 @@ def prepare_datasets(seed_val, pollute_rate_val):
     torch.manual_seed(seed_val)
     np.random.seed(seed_val)
 
-    mnist = MNIST(root='./data', train=True, download=True, transform=transforms.ToTensor())
+    mnist_root = "." if os.path.isdir("./MNIST/raw") else "./data"
+    download = not os.path.isdir(os.path.join(mnist_root, "MNIST", "raw"))
+    mnist = MNIST(root=mnist_root, train=True, download=download, transform=transforms.ToTensor())
     tr, val, test = split_data(mnist, 5000, 100, 10000)
     tr.pollute(pollute_rate_val)
 

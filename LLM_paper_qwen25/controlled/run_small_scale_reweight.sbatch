@@ -15,18 +15,16 @@ set -euo pipefail
 
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PACKAGE_ROOT_DEFAULT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-ROOT_DIR="${ROOT_DIR:-${PACKAGE_ROOT_DEFAULT}}"
+ROOT_DIR="${ROOT_DIR:-/home/masiha/hypergrad}"
 ENV_DIR="${ENV_DIR:-/home/masiha/venvs/hypergrad_llm_env}"
 TASK="${TASK:-denoising}"
 METHOD="${METHOD:-hg_ms}"
 SEED="${SEED:-2424}"
 MODEL_NAME="${MODEL_NAME:-gpt2}"
 FIXED_LAMBDA="${FIXED_LAMBDA:-}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-${ROOT_DIR}/outputs/controlled/${SLURM_JOB_ID}}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-${ROOT_DIR}/LLM_minima_selection_small_scale_outputs/${SLURM_JOB_ID}}"
 OUTPUT_DIR="${OUTPUT_ROOT}/${TASK}/${METHOD}_seed${SEED}"
-CACHE_ROOT="${CACHE_ROOT:-${ROOT_DIR}/cache/controlled}"
+CACHE_ROOT="${CACHE_ROOT:-${ROOT_DIR}/LLM_minima_selection/cache}"
 RAW_CACHE_PATH="${RAW_CACHE_PATH:-${CACHE_ROOT}/small_${TASK}_seed${SEED}.json}"
 TOKENIZED_CACHE_PATH="${TOKENIZED_CACHE_PATH:-${CACHE_ROOT}/small_${TASK}_seed${SEED}_${MODEL_NAME//\//_}_ml${MAX_LENGTH:-256}.pt}"
 
@@ -60,7 +58,7 @@ BF16="${BF16:-0}"
 LOCAL_MODEL_ONLY="${LOCAL_MODEL_ONLY:-0}"
 
 mkdir -p "${OUTPUT_DIR}"
-cd "${ROOT_DIR}/controlled"
+cd "${ROOT_DIR}/LLM_minima_selection"
 
 if [[ ! -d "${ENV_DIR}" ]]; then
   python3 -m venv "${ENV_DIR}"

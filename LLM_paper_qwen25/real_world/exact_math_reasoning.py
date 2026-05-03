@@ -109,7 +109,9 @@ def parse_args() -> argparse.Namespace:
         default=False,
     )
     parser.add_argument("--reference-ft-steps", type=int, default=200)
+    parser.add_argument("--reference-ft-epochs", type=int, default=1)
     parser.add_argument("--reference-batch-size", type=int, default=8)
+    parser.add_argument("--reference-grad-accum", type=int, default=1)
     parser.add_argument("--reference-ft-lr", type=float, default=2e-4)
     parser.add_argument("--baseline-score-samples-per-source", type=int, default=256)
     parser.add_argument("--cache-path", default="")
@@ -278,6 +280,151 @@ def model_batch_hidden_mean(model, batch: Dict[str, object], use_bf16: bool) -> 
     mask = batch["attention_mask"].unsqueeze(-1).float()
     denom = mask.sum(dim=1).clamp_min(1.0)
     return (hidden.float() * mask).sum(dim=1) / denom
+
+
+def safe_param_grads(parameters: Sequence[torch.Tensor], grads: Sequence[torch.Tensor | None]) -> List[torch.Tensor]:
+    fixed: List[torch.Tensor] = []
+    for param, grad in zip(parameters, grads):
+        fixed.append(torch.zeros_like(param) if grad is None else grad)
+    return fixed
+
+
+def train_model_on_examples(
+    *,
+    model,
+    examples: Sequence[Dict[str, object]],
+    batch_size: int,
+    grad_accum: int,
+    epochs: int,
+    lr: float,
+    schedule: str,
+    seed: int,
+    device: torch.device,
+    pad_token_id: int,
+    use_bf16: bool,
+) -> None:
+    train_items = list(examples)
+    if not train_items or epochs <= 0:
+        return
+    optimizer = torch.optim.AdamW(
+        (param for param in model.parameters() if param.requires_grad),
+        lr=lr,
+    )
+    num_batches = math.ceil(len(train_items) / max(1, batch_size))
+    total_updates = max(1, math.ceil(num_batches * epochs / max(1, grad_accum)))
+    if schedule == "linear":
+        scheduler = torch.optim.lr_scheduler.LinearLR(
+            optimizer,
+            start_factor=1.0,
+            end_factor=1e-3,
+            total_iters=total_updates,
+        )
+    elif schedule == "cosine":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=total_updates,
+        )
+    else:
+        scheduler = None
+
+    rng = random.Random(seed)
+    micro_step = 0
+    optimizer.zero_grad(set_to_none=True)
+    for epoch in range(epochs):
+        rng.shuffle(train_items)
+        for start in range(0, len(train_items), batch_size):
+            batch_items = train_items[start : start + batch_size]
+            batch = collate_batch(batch_items, device=device, pad_token_id=pad_token_id)
+            with autocast_context(device, use_bf16):
+                logits = model(
+                    input_ids=batch["input_ids"],
+                    attention_mask=batch["attention_mask"],
+                    labels=batch["labels"],
+                ).logits
+                loss = per_example_losses_from_logits(logits, batch["labels"]).mean()
+            (loss / max(1, grad_accum)).backward()
+            if ((micro_step + 1) % max(1, grad_accum)) == 0:
+                optimizer.step()
+                if scheduler is not None:
+                    scheduler.step()
+                optimizer.zero_grad(set_to_none=True)
+            micro_step += 1
+    if micro_step % max(1, grad_accum) != 0:
+        optimizer.step()
+        if scheduler is not None:
+            scheduler.step()
+        optimizer.zero_grad(set_to_none=True)
+
+
+def mean_source_loss_inplace(
+    model,
+    examples: Sequence[Dict[str, object]],
+    *,
+    batch_size: int,
+    device: torch.device,
+    pad_token_id: int,
+    use_bf16: bool,
+) -> float:
+    if not examples:
+        return math.nan
+    losses = []
+    was_training = model.training
+    model.eval()
+    with torch.no_grad():
+        for batch in iter_batches(
+            examples,
+            batch_size=max(1, batch_size),
+            device=device,
+            pad_token_id=pad_token_id,
+        ):
+            losses.append(float(model_batch_mean_loss(model, batch, use_bf16=use_bf16).detach().cpu()))
+    if was_training:
+        model.train()
+    return sum(losses) / max(1, len(losses))
+
+
+def mean_trainable_grad_vector(
+    model,
+    examples: Sequence[Dict[str, object]],
+    *,
+    batch_size: int,
+    device: torch.device,
+    pad_token_id: int,
+    use_bf16: bool,
+) -> tuple[torch.Tensor, float]:
+    if not examples:
+        raise RuntimeError("Cannot compute gradient vector for an empty example set.")
+    params = tuple(param for param in model.parameters() if param.requires_grad)
+    total_vector = None
+    total_loss = 0.0
+    batch_count = 0
+    was_training = model.training
+    model.eval()
+    for batch in iter_batches(
+        examples,
+        batch_size=max(1, batch_size),
+        device=device,
+        pad_token_id=pad_token_id,
+    ):
+        loss = model_batch_mean_loss(model, batch, use_bf16=use_bf16)
+        grads = torch.autograd.grad(
+            loss,
+            params,
+            create_graph=False,
+            retain_graph=False,
+            allow_unused=True,
+        )
+        flat = torch.cat(
+            [grad.detach().float().reshape(-1).cpu() for grad in safe_param_grads(params, grads)],
+            dim=0,
+        )
+        total_vector = flat if total_vector is None else total_vector + flat
+        total_loss += float(loss.detach().cpu())
+        batch_count += 1
+    if was_training:
+        model.train()
+    assert total_vector is not None
+    return total_vector / max(1, batch_count), total_loss / max(1, batch_count)
 
 
 def weighted_source_loss(
@@ -903,7 +1050,8 @@ def compute_reference_baseline_lambda(
     splits: Dict[str, object],
     device: torch.device,
 ) -> tuple[List[float], Dict[str, object]]:
-    ref_model, ref_tokenizer = load_model_and_tokenizer_with_name(args, args.reference_model_name, device)
+    reference_model_name = args.model_name if method == "less" else args.reference_model_name
+    ref_model, ref_tokenizer = load_model_and_tokenizer_with_name(args, reference_model_name, device)
     tokenized_train_by_source, effective_train_per_source = tokenized_by_source_or_fail(
         tokenizer=ref_tokenizer,
         raw_by_source=splits["reweight_train"],
@@ -912,81 +1060,129 @@ def compute_reference_baseline_lambda(
         allow_shortfall=args.allow_train_shortfall,
     )
     tokenized_val_opt = tokenize_examples(ref_tokenizer, splits["val_opt"], max_length=args.max_length)
-    if len(tokenized_val_opt) == 0:
+    tokenized_val_tune = tokenize_examples(ref_tokenizer, splits["val_tune"], max_length=args.max_length)
+    tokenized_val_all = tokenized_val_opt + tokenized_val_tune
+    if len(tokenized_val_all) == 0:
         raise RuntimeError("Reference validation set became empty after tokenization.")
 
-    base_losses: List[float] = []
-    score_count = min(args.baseline_score_samples_per_source, effective_train_per_source)
-    ref_model.eval()
-    with torch.no_grad():
-        for source_examples in tokenized_train_by_source:
-            losses = []
-            for batch in iter_batches(source_examples[:score_count], batch_size=args.reference_batch_size, device=device, pad_token_id=ref_tokenizer.pad_token_id):
-                losses.append(float(model_batch_mean_loss(ref_model, batch, use_bf16=args.bf16).detach().cpu()))
-            base_losses.append(sum(losses) / max(1, len(losses)))
-
-    optimizer = torch.optim.AdamW((param for param in ref_model.parameters() if param.requires_grad), lr=args.reference_ft_lr)
-    ref_model.train()
-    rng = random.Random(args.seed + 515151)
-    val_pool = list(tokenized_val_opt)
-    for step in range(args.reference_ft_steps):
-        sample = rng.sample(val_pool, k=min(args.reference_batch_size, len(val_pool)))
-        batch = collate_batch(sample, device=device, pad_token_id=ref_tokenizer.pad_token_id)
-        with autocast_context(device, args.bf16):
-            logits = ref_model(
-                input_ids=batch["input_ids"],
-                attention_mask=batch["attention_mask"],
-                labels=batch["labels"],
-            ).logits
-            loss = per_example_losses_from_logits(logits, batch["labels"]).mean()
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad(set_to_none=True)
-
-    ref_model.eval()
-    ref_vector = None
+    if args.baseline_score_samples_per_source <= 0:
+        score_count = effective_train_per_source
+    else:
+        score_count = min(args.baseline_score_samples_per_source, effective_train_per_source)
     if method == "less":
-        ref_vectors = []
-        with torch.no_grad():
-            for batch in iter_batches(val_pool[: min(len(val_pool), score_count)], batch_size=args.reference_batch_size, device=device, pad_token_id=ref_tokenizer.pad_token_id):
-                ref_vectors.append(model_batch_hidden_mean(ref_model, batch, use_bf16=args.bf16).mean(dim=0))
-        ref_vector = torch.stack(ref_vectors, dim=0).mean(dim=0)
-
-    scores: List[float] = []
-    tuned_losses: List[float] = []
-    with torch.no_grad():
-        for source_examples, base_loss in zip(tokenized_train_by_source, base_losses):
+        warmup_examples = [example for source_examples in tokenized_train_by_source for example in source_examples]
+        train_model_on_examples(
+            model=ref_model,
+            examples=warmup_examples,
+            batch_size=args.reference_batch_size,
+            grad_accum=args.reference_grad_accum,
+            epochs=args.reference_ft_epochs,
+            lr=args.reference_ft_lr,
+            schedule="linear",
+            seed=args.seed + 515151,
+            device=device,
+            pad_token_id=ref_tokenizer.pad_token_id,
+            use_bf16=args.bf16,
+        )
+        val_subset = tokenized_val_all
+        ref_vector, val_loss = mean_trainable_grad_vector(
+            ref_model,
+            val_subset,
+            batch_size=args.reference_batch_size,
+            device=device,
+            pad_token_id=ref_tokenizer.pad_token_id,
+            use_bf16=args.bf16,
+        )
+        scores = []
+        source_losses = []
+        for source_examples in tokenized_train_by_source:
             subset = source_examples[:score_count]
-            losses = []
-            vectors = []
-            for batch in iter_batches(subset, batch_size=args.reference_batch_size, device=device, pad_token_id=ref_tokenizer.pad_token_id):
-                losses.append(float(model_batch_mean_loss(ref_model, batch, use_bf16=args.bf16).detach().cpu()))
-                if method == "less":
-                    vectors.append(model_batch_hidden_mean(ref_model, batch, use_bf16=args.bf16).mean(dim=0))
-            tuned_loss = sum(losses) / max(1, len(losses))
+            source_vector, source_loss = mean_trainable_grad_vector(
+                ref_model,
+                subset,
+                batch_size=args.reference_batch_size,
+                device=device,
+                pad_token_id=ref_tokenizer.pad_token_id,
+                use_bf16=args.bf16,
+            )
+            cosine = F.cosine_similarity(source_vector.unsqueeze(0), ref_vector.unsqueeze(0)).item()
+            scores.append(max(0.0, cosine))
+            source_losses.append(source_loss)
+        details = {
+            "reference_model_name": reference_model_name,
+            "reference_ft_epochs": args.reference_ft_epochs,
+            "reference_ft_lr": args.reference_ft_lr,
+            "reference_batch_size": args.reference_batch_size,
+            "reference_grad_accum": args.reference_grad_accum,
+            "score_samples_per_source": score_count,
+            "validation_score_samples": len(val_subset),
+            "validation_pool_examples": len(tokenized_val_all),
+            "validation_pool_mode": "full_baseline_validation",
+            "validation_average_loss": val_loss,
+            "source_average_losses": source_losses,
+            "scores": scores,
+            "gradient_dim": int(ref_vector.numel()),
+        }
+    else:
+        base_losses: List[float] = []
+        for source_examples in tokenized_train_by_source:
+            base_losses.append(
+                mean_source_loss_inplace(
+                    ref_model,
+                    source_examples[:score_count],
+                    batch_size=args.reference_batch_size,
+                    device=device,
+                    pad_token_id=ref_tokenizer.pad_token_id,
+                    use_bf16=args.bf16,
+                )
+            )
+
+        train_model_on_examples(
+            model=ref_model,
+            examples=tokenized_val_all,
+            batch_size=args.reference_batch_size,
+            grad_accum=args.reference_grad_accum,
+            epochs=args.reference_ft_epochs,
+            lr=args.reference_ft_lr,
+            schedule="cosine",
+            seed=args.seed + 515151,
+            device=device,
+            pad_token_id=ref_tokenizer.pad_token_id,
+            use_bf16=args.bf16,
+        )
+
+        tuned_losses: List[float] = []
+        scores: List[float] = []
+        for source_examples, base_loss in zip(tokenized_train_by_source, base_losses):
+            tuned_loss = mean_source_loss_inplace(
+                ref_model,
+                source_examples[:score_count],
+                batch_size=args.reference_batch_size,
+                device=device,
+                pad_token_id=ref_tokenizer.pad_token_id,
+                use_bf16=args.bf16,
+            )
             tuned_losses.append(tuned_loss)
-            if method == "rho_loss":
-                score = max(0.0, base_loss - tuned_loss)
-            else:
-                assert ref_vector is not None
-                source_vector = torch.stack(vectors, dim=0).mean(dim=0)
-                cosine = F.cosine_similarity(source_vector.unsqueeze(0), ref_vector.unsqueeze(0)).item()
-                score = max(0.0, cosine)
-            scores.append(score)
+            scores.append(max(0.0, base_loss - tuned_loss))
+        details = {
+            "reference_model_name": reference_model_name,
+            "reference_ft_epochs": args.reference_ft_epochs,
+            "reference_ft_lr": args.reference_ft_lr,
+            "reference_batch_size": args.reference_batch_size,
+            "reference_grad_accum": args.reference_grad_accum,
+            "score_samples_per_source": score_count,
+            "validation_pool_examples": len(tokenized_val_all),
+            "validation_pool_mode": "full_baseline_validation",
+            "base_losses": base_losses,
+            "tuned_losses": tuned_losses,
+            "scores": scores,
+        }
 
     if sum(scores) <= 0:
         lambdas = [1.0 / len(scores)] * len(scores)
     else:
         total = sum(scores)
         lambdas = [score / total for score in scores]
-
-    details = {
-        "reference_model_name": args.reference_model_name,
-        "score_samples_per_source": score_count,
-        "base_losses": base_losses,
-        "tuned_losses": tuned_losses,
-        "scores": scores,
-    }
 
     del ref_model
     gc.collect()
@@ -1008,6 +1204,10 @@ def filter_validation_examples(
 
 def main() -> None:
     args = parse_args()
+    if args.method in {"hg_single", "hg_ms", "hg_random"} and args.gradient_checkpointing:
+        # The hypergradient path uses higher-order autograd through functional_call.
+        # Gradient checkpointing breaks that path here and collapses theta grads to zero.
+        args.gradient_checkpointing = False
     overall_start_time = time.perf_counter()
     seed_everything(args.seed)
     torch.set_float32_matmul_precision("high")
@@ -1057,6 +1257,16 @@ def main() -> None:
             indent=2,
         )
     )
+    if args.method in {"hg_single", "hg_ms", "hg_random"}:
+        print(
+            json.dumps(
+                {
+                    "stage": "hg_runtime_flags",
+                    "method": args.method,
+                    "gradient_checkpointing": args.gradient_checkpointing,
+                }
+            )
+        )
 
     source_names = splits["source_names"]
     baseline_details = None
@@ -1353,6 +1563,20 @@ def main() -> None:
                         }
                     )
                 )
+            if args.method in {"hg_single", "hg_random", "hg_ms"}:
+                selected = None
+                selected_outcome = None
+                selected_val_scalar = None
+                grad_theta = None
+                selection_batches = None
+                hypergrad_batches = None
+            elif args.method == "scalebio":
+                train_loss_w = None
+                train_loss_u = None
+                val_loss = None
+                grad_w = None
+                grad_u = None
+                grad_theta = None
             gc.collect()
             if device.type == "cuda":
                 torch.cuda.empty_cache()

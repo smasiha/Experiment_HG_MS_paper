@@ -1,0 +1,122 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${ROOT_DIR:-${SCRIPT_DIR}/..}"
+SEED="${SEED:-2424}"
+TAG="${TAG:-large_qwen25_32b_lambda_diag_$(date +%Y%m%d_%H%M%S)}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-/scratch/${USER}/${TAG}}"
+
+MODEL_NAME="${MODEL_NAME:-Qwen/Qwen2.5-32B-Instruct}"
+REFERENCE_MODEL_NAME="${REFERENCE_MODEL_NAME:-Qwen/Qwen2.5-0.5B-Instruct}"
+
+# This diagnostic is only meant to validate the reweighting signal.  It stops
+# after the reweighting stage and never launches final fine-tuning/evaluation.
+SBATCH_TIME="${SBATCH_TIME:-04:00:00}"
+SBATCH_MEM="${SBATCH_MEM:-90G}"
+SBATCH_CPUS="${SBATCH_CPUS:-16}"
+MAX_LENGTH="${MAX_LENGTH:-256}"
+REWEIGHT_TRAIN_PER_SOURCE="${REWEIGHT_TRAIN_PER_SOURCE:-120}"
+VAL_PER_SOURCE="${VAL_PER_SOURCE:-80}"
+REWEIGHT_STEPS="${REWEIGHT_STEPS:-20}"
+REWEIGHT_WALL_CLOCK_SECONDS="${REWEIGHT_WALL_CLOCK_SECONDS:-3600}"
+REWEIGHT_MODEL_LR="${REWEIGHT_MODEL_LR:-1e-4}"
+REWEIGHT_OUTER_LR="${REWEIGHT_OUTER_LR:-1.0}"
+PER_SOURCE_BATCH="${PER_SOURCE_BATCH:-1}"
+VAL_BATCH_SIZE="${VAL_BATCH_SIZE:-1}"
+SELECTION_VAL_BATCH_SIZE="${SELECTION_VAL_BATCH_SIZE:-1}"
+SELECTION_VAL_BATCHES="${SELECTION_VAL_BATCHES:-1}"
+HYPERGRAD_VAL_BATCHES="${HYPERGRAD_VAL_BATCHES:-1}"
+INNER_STEPS="${INNER_STEPS:-1}"
+M_BRANCHES="${M_BRANCHES:-2}"
+BRANCH_NOISE_STD="${BRANCH_NOISE_STD:-1e-3}"
+LORA_R="${LORA_R:-1}"
+LORA_ALPHA="${LORA_ALPHA:-2}"
+LORA_DROPOUT="${LORA_DROPOUT:-0.05}"
+SCALEBIO_ALPHA="${SCALEBIO_ALPHA:-10.0}"
+TRAIN_RAW_OVERSAMPLE="${TRAIN_RAW_OVERSAMPLE:-4.0}"
+VAL_RAW_OVERSAMPLE="${VAL_RAW_OVERSAMPLE:-1.2}"
+CACHE_PATH="${CACHE_PATH:-/scratch/${USER}/hypergrad_exact_cache/qwen25_32b_lambda_diag_seed${SEED}_train${REWEIGHT_TRAIN_PER_SOURCE}_val${VAL_PER_SOURCE}_max${MAX_LENGTH}_tov${TRAIN_RAW_OVERSAMPLE}_vov${VAL_RAW_OVERSAMPLE}.json}"
+
+submit_diag_job() {
+  local method="$1"
+  local run_name=""
+  local job_name=""
+  local extra_export=""
+
+  case "${method}" in
+    scalebio)
+      run_name="scalebio_qwen25_32b_lambda_diag"
+      job_name="lg32_sbio_diag"
+      extra_export=",THETA_OPTIMIZER=sgd,SCALEBIO_ALPHA=${SCALEBIO_ALPHA},M_BRANCHES=1,BRANCH_NOISE_STD=0.0"
+      ;;
+    hg_ms)
+      run_name="hg_ms_qwen25_32b_lambda_diag"
+      job_name="lg32_hgms_diag"
+      extra_export=",THETA_OPTIMIZER=adam,THETA_INIT_STD=0.0,M_BRANCHES=${M_BRANCHES},BRANCH_NOISE_STD=${BRANCH_NOISE_STD},SELECTION_TRAIN_TOLERANCE=0.05,SELECTION_TRAIN_PENALTY=0.0"
+      ;;
+    *)
+      echo "Unknown diagnostic method: ${method}" >&2
+      exit 1
+      ;;
+  esac
+
+  echo "Submitting ${method} lambda diagnostic -> ${OUTPUT_ROOT}/${run_name}"
+  sbatch \
+    --job-name="${job_name}" \
+    --time="${SBATCH_TIME}" \
+    --mem="${SBATCH_MEM}" \
+    --cpus-per-task="${SBATCH_CPUS}" \
+    --export=ALL,\
+ROOT_DIR="${ROOT_DIR}",\
+METHOD="${method}",\
+MODEL_NAME="${MODEL_NAME}",\
+REFERENCE_MODEL_NAME="${REFERENCE_MODEL_NAME}",\
+SEED="${SEED}",\
+OUTPUT_ROOT="${OUTPUT_ROOT}",\
+RUN_NAME="${run_name}",\
+HF_CACHE_ROOT="/scratch/${USER}/hf_cache_jobs/qwen25_32b/${run_name}",\
+LOCAL_MODEL_ONLY=0,\
+CACHE_PATH="${CACHE_PATH}",\
+VAL_KINDS_SPEC=gsm8k+math,\
+MAX_LENGTH="${MAX_LENGTH}",\
+ATTN_IMPLEMENTATION=sdpa,\
+GRADIENT_CHECKPOINTING=0,\
+LORA_R="${LORA_R}",\
+LORA_ALPHA="${LORA_ALPHA}",\
+LORA_DROPOUT="${LORA_DROPOUT}",\
+REWEIGHT_TRAIN_PER_SOURCE="${REWEIGHT_TRAIN_PER_SOURCE}",\
+VAL_PER_SOURCE="${VAL_PER_SOURCE}",\
+TRAIN_RAW_OVERSAMPLE="${TRAIN_RAW_OVERSAMPLE}",\
+VAL_RAW_OVERSAMPLE="${VAL_RAW_OVERSAMPLE}",\
+ALLOW_TRAIN_SHORTFALL=1,\
+REWEIGHT_STEPS="${REWEIGHT_STEPS}",\
+REWEIGHT_WALL_CLOCK_SECONDS="${REWEIGHT_WALL_CLOCK_SECONDS}",\
+REWEIGHT_MODEL_LR="${REWEIGHT_MODEL_LR}",\
+REWEIGHT_OUTER_LR="${REWEIGHT_OUTER_LR}",\
+PER_SOURCE_BATCH="${PER_SOURCE_BATCH}",\
+VAL_BATCH_SIZE="${VAL_BATCH_SIZE}",\
+SELECTION_VAL_BATCH_SIZE="${SELECTION_VAL_BATCH_SIZE}",\
+SELECTION_VAL_BATCHES="${SELECTION_VAL_BATCHES}",\
+HYPERGRAD_VAL_BATCHES="${HYPERGRAD_VAL_BATCHES}",\
+REUSE_SELECTION_BATCHES_FOR_HYPERGRAD=1,\
+INNER_STEPS="${INNER_STEPS}",\
+SELECTION_INNER_STEPS="${INNER_STEPS}",\
+HYPERGRAD_INNER_STEPS="${INNER_STEPS}",\
+EVAL_BATCH_SIZE=1,\
+FINAL_TRAIN_SIZE=0,\
+FINAL_FT_MICRO_BATCH=1,\
+FINAL_FT_GRAD_ACCUM=64,\
+GSM8K_EVAL_SIZE=0,\
+MATH_EVAL_SIZE=0,\
+EVAL_MATH=1,\
+EVAL_MAX_NEW_TOKENS=128,\
+STOP_AFTER_REWEIGHT=1,\
+USE_BEST_REWEIGHT_CHECKPOINT=0\
+"${extra_export}" \
+    "${SCRIPT_DIR}/run_exact_math_reasoning.sbatch"
+}
+
+echo "Output root: ${OUTPUT_ROOT}"
+submit_diag_job scalebio
+submit_diag_job hg_ms

@@ -1,0 +1,86 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${ROOT_DIR:-${SCRIPT_DIR}}"
+MODEL_PRESET="qwen2_7b"
+SEED="${SEED:-2424}"
+BRANCHES="${BRANCHES:-2 8}"
+REWEIGHT_STEPS="${REWEIGHT_STEPS:-10}"
+TAG="${TAG:-qwen2_7b_hgms_branch_smoke_$(date +%Y%m%d_%H%M%S)}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-/scratch/${USER}/${TAG}}"
+
+source "${ROOT_DIR}/model_presets.sh"
+apply_math_model_preset "${MODEL_PRESET}"
+
+cd "${ROOT_DIR}"
+
+CACHE_PATH="${CACHE_PATH:-/scratch/${USER}/hypergrad_exact_cache/exact_splits_seed${SEED}_train500_val280_tov4.0_vov1.2.json}"
+
+submit_branch() {
+  local branches="$1"
+  local run_name="hg_ms_n${branches}_seed${SEED}_${MODEL_PRESET}_gsm8k_branch_smoke"
+
+  sbatch \
+    --job-name="qwen_hgms_n${branches}_smoke" \
+    --time=02:00:00 \
+    --export=ALL,\
+METHOD=hg_ms,\
+MODEL_NAME="${MODEL_NAME}",\
+REFERENCE_MODEL_NAME="${REFERENCE_MODEL_NAME}",\
+SEED="${SEED}",\
+HF_CACHE_ROOT="/scratch/${USER}/hf_cache_jobs/${MODEL_PRESET}/${run_name}",\
+LOCAL_MODEL_ONLY="${LOCAL_MODEL_ONLY}",\
+STOP_AFTER_REWEIGHT=1,\
+USE_BEST_REWEIGHT_CHECKPOINT=0,\
+OUTPUT_ROOT="${OUTPUT_ROOT}",\
+RUN_NAME="${run_name}",\
+VAL_KINDS_SPEC=gsm8k,\
+MAX_LENGTH="${MAX_LENGTH}",\
+VAL_BATCH_SIZE="${VAL_BATCH_SIZE}",\
+SELECTION_VAL_BATCH_SIZE=1,\
+EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE}",\
+REWEIGHT_MODEL_LR=1e-5,\
+REWEIGHT_OUTER_LR=0.05,\
+THETA_OPTIMIZER=adam,\
+BRANCH_NOISE_STD=0.001,\
+REWEIGHT_TRAIN_PER_SOURCE=500,\
+ALLOW_TRAIN_SHORTFALL=1,\
+PER_SOURCE_BATCH=1,\
+REWEIGHT_STEPS="${REWEIGHT_STEPS}",\
+REWEIGHT_WALL_CLOCK_SECONDS=0,\
+SELECTION_VAL_BATCHES=4,\
+HYPERGRAD_VAL_BATCHES=4,\
+REUSE_SELECTION_BATCHES_FOR_HYPERGRAD=1,\
+SELECTION_TRAIN_TOLERANCE=0.05,\
+SELECTION_TRAIN_PENALTY=0.0,\
+INNER_STEPS=1,\
+SELECTION_INNER_STEPS=0,\
+HYPERGRAD_INNER_STEPS=0,\
+M_BRANCHES="${branches}",\
+FINAL_TRAIN_SIZE=20000,\
+FINAL_FT_MICRO_BATCH="${FINAL_FT_MICRO_BATCH}",\
+FINAL_FT_GRAD_ACCUM="${FINAL_FT_GRAD_ACCUM}",\
+GSM8K_EVAL_SIZE=0,\
+EVAL_MATH=0,\
+MATH_EVAL_SIZE=0,\
+REFERENCE_BATCH_SIZE="${REFERENCE_BATCH_SIZE}",\
+REFERENCE_FT_STEPS=100,\
+LORA_R="${LORA_R}",\
+LORA_ALPHA="${LORA_ALPHA}",\
+LORA_DROPOUT="${LORA_DROPOUT}",\
+CACHE_PATH="${CACHE_PATH}" \
+    run_exact_math_reasoning.sbatch
+}
+
+echo "Model preset: ${MODEL_PRESET}"
+echo "Model: ${MODEL_NAME}"
+echo "Seed: ${SEED}"
+echo "Branches: ${BRANCHES}"
+echo "Reweight steps: ${REWEIGHT_STEPS}"
+echo "Output root: ${OUTPUT_ROOT}"
+echo "Cache path: ${CACHE_PATH}"
+
+for branches in ${BRANCHES}; do
+  submit_branch "${branches}"
+done

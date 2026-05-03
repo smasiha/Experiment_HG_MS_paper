@@ -1,6 +1,7 @@
 import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 
+import os
 import time
 import random
 import math
@@ -598,7 +599,9 @@ def prepare_datasets(seed_val, pollute_rate_val):
     torch.manual_seed(seed_val)
     np.random.seed(seed_val)
 
-    mnist = MNIST(root='./data', train=True, download=True, transform=transforms.ToTensor())
+    mnist_root = "." if os.path.isdir("./MNIST/raw") else "./data"
+    download = not os.path.isdir(os.path.join(mnist_root, "MNIST", "raw"))
+    mnist = MNIST(root=mnist_root, train=True, download=download, transform=transforms.ToTensor())
     tr, val, test = split_data(mnist, 5000, 100, 10000)
     tr.pollute(pollute_rate_val)
 
@@ -647,7 +650,9 @@ def _itd_metrics(
 # =========================================================
 def run_ITD_Sel(config: Optional[Dict[str, Any]] = None, *,
                 verbose: bool = True, log_every: Optional[int] = None,
-                return_history: bool = False, **overrides):
+                return_history: bool = False,
+                return_state: bool = False,
+                **overrides):
     params_cfg = DEFAULT_ITD_CONFIG.copy()
     if config:
         params_cfg.update(config)
@@ -948,6 +953,18 @@ def run_ITD_Sel(config: Optional[Dict[str, Any]] = None, *,
     final_metrics["elapsed_s"] = float(time.perf_counter() - start_t)
     if last_best_idx is not None:
         final_metrics["best_idx"] = last_best_idx
+    if return_state:
+        payload = {
+            "final_metrics": final_metrics,
+            "state": {
+                "x": x.detach().clone(),
+                "y": [p.detach().clone() for p in y_best],
+                "config": dict(params_cfg),
+            },
+        }
+        if return_history:
+            payload["history"] = history
+        return payload
     if return_history:
         return final_metrics, history
     return final_metrics
@@ -1008,6 +1025,7 @@ def run_ITD_Sel(
     verbose: bool = True,
     log_every: Optional[int] = None,
     return_history: bool = False,
+    return_state: bool = False,
     time_budget_s: Optional[float] = None,
 ):
     """
@@ -1063,6 +1081,7 @@ def run_ITD_Sel(
         verbose=verbose,
         log_every=log_every,          # if None, internal runner uses print_every
         return_history=return_history,
+        return_state=bool(return_state),
     )
 
 

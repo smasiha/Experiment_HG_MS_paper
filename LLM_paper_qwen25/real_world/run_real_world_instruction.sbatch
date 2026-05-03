@@ -15,15 +15,14 @@ set -euo pipefail
 
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PACKAGE_ROOT_DEFAULT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-ROOT_DIR="${ROOT_DIR:-${PACKAGE_ROOT_DEFAULT}}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="${ROOT_DIR:-${SCRIPT_DIR}}"
 ENV_DIR="${ENV_DIR:-/home/masiha/venvs/hypergrad_llm_env}"
 METHOD="${METHOD:-hg_ms}"
 SEED="${SEED:-2424}"
 MODEL_NAME="${MODEL_NAME:-Qwen/Qwen2-7B}"
 REFERENCE_MODEL_NAME="${REFERENCE_MODEL_NAME:-Qwen/Qwen2-1.5B}"
-OUTPUT_ROOT="${OUTPUT_ROOT:-${ROOT_DIR}/outputs/real_world_instruction/${SLURM_JOB_ID}}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-/scratch/${USER}/hypergrad_instruction_outputs/${SLURM_JOB_ID}}"
 RUN_NAME="${RUN_NAME:-${METHOD}_seed${SEED}}"
 OUTPUT_DIR="${OUTPUT_ROOT}/${RUN_NAME}"
 
@@ -77,7 +76,7 @@ GRADIENT_CHECKPOINTING="${GRADIENT_CHECKPOINTING:-0}"
 
 mkdir -p "${OUTPUT_DIR}"
 mkdir -p "/scratch/${USER}/slurm"
-cd "${ROOT_DIR}/real_world"
+cd "${ROOT_DIR}"
 
 source "${ENV_DIR}/bin/activate"
 

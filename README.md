@@ -20,7 +20,7 @@ The goal is reproducibility and auditability: the repository keeps the code, lau
 The result summaries are frozen snapshots of the numbers currently used in the draft:
 
 - LLM controlled tasks: `LLM_paper_qwen25/controlled/results_summary.md`
-- LLM GSM8K/MATH, Qwen2.5-32B, MT-Bench, budget, and branch-count tables: `LLM_paper_qwen25/real_world/results_summary.md`
+- LLM GSM8K/MATH, Qwen2.5-32B, MT-Bench, Appendix F source-mixture/uncertainty audits, budget, and branch-count tables: `LLM_paper_qwen25/real_world/results_summary.md`
 - Data hyper-cleaning: `data_hyper_cleaning/results_summary.md`
 - Imbalanced loss tuning: `imbalance_data/results_summary.md`
 

@@ -20,6 +20,7 @@ Large generated artifacts are intentionally excluded. The repository keeps runna
 | Instruction following / MT-Bench | `real_world/` |
 | Qwen-2-7B budget sensitivity | `real_world/` |
 | Qwen-2-7B HG-MS branch-count sensitivity | `real_world/` |
+| Appendix F LLM source-mixture and uncertainty audits | `real_world/results_summary.md` |
 
 ## Dependencies
 
@@ -32,7 +33,7 @@ For MT-Bench judging, export `OPENAI_API_KEY`. For Hugging Face models and datas
 ## Result Snapshots
 
 - `controlled/results_summary.md`: current controlled-task table values.
-- `real_world/results_summary.md`: current main LLM tables and diagnostics.
+- `real_world/results_summary.md`: current main LLM tables, Appendix F source-mixture audits, uncertainty ranges, protocol notes, and diagnostics.
 
 ## Important Protocol Notes
 

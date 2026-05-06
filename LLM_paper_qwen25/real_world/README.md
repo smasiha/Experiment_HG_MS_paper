@@ -60,6 +60,13 @@ Large-model Qwen2.5-32B:
 - `RHO-LOSS` and `LESS` are marked `OOM` in the current paper table under the same large-model memory budget.
 - Completed non-OOM rows use the corresponding 32B source mixture, the full `20K`-example final fine-tuning set, and full GSM8K/MATH evaluation.
 
+Appendix F protocol details reflected in `results_summary.md`:
+
+- Final SFT is one fixed epoch with AdamW learning rate `8e-6`; math uses `20K` examples and instruction following uses `10K`.
+- Main math `HG-MS` uses `N=4` branches for Llama-3-8B, Qwen-2-7B, and Gemma-2-9B; instruction `HG-MS` uses `N=8`; `HG-baseline` uses `N=1`.
+- The source-mixture audit tables report the final source proportions used by the paper-facing rows.
+- The uncertainty table reports finite-evaluation-set intervals only; it does not estimate training-seed variance.
+
 ## Example Commands
 
 Dry-run a main math launcher:
@@ -88,4 +95,4 @@ python submit_missing_math_eval_parallel.py --runs-root /scratch/$USER/<runs-roo
 
 ## Results
 
-The current paper-facing numbers are in `results_summary.md`. Generated run directories, model checkpoints, and raw logs are deliberately excluded from git.
+The current paper-facing numbers, Appendix F source-mixture audit, uncertainty ranges, and key implementation hyperparameters are in `results_summary.md`. Generated run directories, model checkpoints, and raw logs are deliberately excluded from git.
